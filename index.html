@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e7a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>IRP 포트폴리오 관리</title>
+<style>
+  :root{
+    --accent:#0e7a5f;          /* IRP 전용 색상 (ISA·연금저축과 구분: 에메랄드 그린) */
+    --accent-soft:#d7f2e9;
+    --accent-dark:#0a5c47;
+    --bg:#f4f7f6;
+    --card:#ffffff;
+    --text:#1c2422;
+    --sub:#6b7a76;
+    --line:#e2eae7;
+    --red:#d64545;
+    --blue:#2563eb;
+    --warn-bg:#fdecec;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--bg);color:var(--text);padding:14px;max-width:760px;margin:0 auto;padding-bottom:90px}
+  h1{font-size:1.25rem;color:var(--accent-dark);display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  h1 .badge{background:var(--accent);color:#fff;font-size:.7rem;padding:3px 8px;border-radius:999px;font-weight:600}
+  .updated{font-size:.72rem;color:var(--sub);margin-bottom:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:.9rem;color:var(--accent-dark);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+  /* 요약 */
+  .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .sum-item{background:var(--accent-soft);border-radius:10px;padding:10px}
+  .sum-item .lbl{font-size:.68rem;color:var(--accent-dark);opacity:.8}
+  .sum-item .val{font-size:1.02rem;font-weight:700;margin-top:2px}
+  .pos{color:var(--red)} .neg{color:var(--blue)}
+  /* 비중 점검 */
+  .wrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:.8rem}
+  .wrow:last-child{border-bottom:none}
+  .wrow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wrow .cur{font-weight:700;width:56px;text-align:right}
+  .wrow .tgt{color:var(--sub);width:70px;text-align:right}
+  .wrow .gap{width:72px;text-align:right;font-weight:600}
+  .gap.ok{color:var(--accent)} .gap.over{color:var(--red)} .gap.under{color:var(--blue)}
+  .alertbox{background:var(--warn-bg);border:1px solid #f3c8c8;color:#8a2b2b;border-radius:10px;padding:10px;font-size:.78rem;margin-top:10px;line-height:1.5}
+  .okbox{background:var(--accent-soft);color:var(--accent-dark);border-radius:10px;padding:10px;font-size:.78rem;margin-top:10px}
+  .thr{display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--sub)}
+  .thr input{width:44px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;text-align:right;font-size:.72rem}
+  /* 배분 바 */
+  .allocbar{display:flex;height:22px;border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .allocbar div{height:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.7rem;color:var(--sub)}
+  .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+  /* GitHub */
+  .gh-btns{display:flex;flex-wrap:wrap;gap:8px}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:9px;padding:10px 14px;font-size:.8rem;font-weight:600}
+  .btn-accent{background:var(--accent);color:#fff}
+  .btn-line{background:#fff;color:var(--accent-dark);border:1px solid var(--accent)}
+  .btn-ghost{background:var(--bg);color:var(--sub);border:1px solid var(--line)}
+  .gh-cfg{margin-top:10px;display:none;gap:6px;flex-direction:column}
+  .gh-cfg.open{display:flex}
+  .gh-cfg input{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:.8rem;width:100%}
+  .gh-cfg .hint{font-size:.68rem;color:var(--sub);line-height:1.5}
+  .gh-status{font-size:.73rem;color:var(--sub);margin-top:8px;line-height:1.5;word-break:break-all}
+  /* 보유 자산 */
+  .holding{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .h-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .h-top input.h-name{flex:1;min-width:0;font-weight:700;font-size:.9rem;border:none;background:transparent;color:var(--text)}
+  .h-top input.h-ticker{width:74px;font-size:.75rem;color:var(--sub);border:none;background:transparent;text-align:right}
+  .del{background:none;border:none;color:#c9948f;font-size:1.05rem;padding:2px 6px}
+  .h-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .fld .lbl{font-size:.66rem;color:var(--sub);margin-bottom:2px}
+  .fld input,.fld select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:.83rem;background:#fff}
+  .h-foot{display:flex;justify-content:space-between;margin-top:8px;font-size:.76rem}
+  .h-foot .pl{font-weight:700}
+  .add-btn{position:fixed;bottom:18px;right:18px;width:54px;height:54px;border-radius:50%;background:var(--accent);color:#fff;font-size:1.7rem;box-shadow:0 4px 12px rgba(14,122,95,.4);display:flex;align-items:center;justify-content:center;z-index:5}
+  .empty{text-align:center;color:var(--sub);font-size:.82rem;padding:20px 0;line-height:1.7}
+  /* 토스트 */
+  #toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:rgba(28,36,34,.88);color:#fff;padding:8px 16px;border-radius:999px;font-size:.75rem;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9;white-space:nowrap}
+  #toast.show{opacity:1}
+  @media(min-width:560px){.summary{grid-template-columns:repeat(4,1fr)}.h-grid{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+
+<h1>IRP 포트폴리오 관리 <span class="badge">IRP</span></h1>
+<div class="updated" id="updatedAt">-</div>
+
+<!-- 1. 요약 -->
+<div class="card">
+  <div class="summary">
+    <div class="sum-item"><div class="lbl">총 평가금액</div><div class="val" id="sumValue">0원</div></div>
+    <div class="sum-item"><div class="lbl">총 손익</div><div class="val" id="sumPL">0원</div></div>
+    <div class="sum-item"><div class="lbl">수익률</div><div class="val" id="sumRate">0%</div></div>
+    <div class="sum-item"><div class="lbl">자산 수</div><div class="val" id="sumCount">0</div></div>
+  </div>
+</div>
+
+<!-- 2. 목표비중 점검 -->
+<div class="card">
+  <h2>목표비중 점검
+    <span class="thr">경고 기준 ±<input type="number" id="thrInput" min="1" max="30" step="0.5">%p</span>
+  </h2>
+  <div id="weightRows"></div>
+  <div id="weightAlert"></div>
+</div>
+
+<!-- 3. 자산 배분 바 -->
+<div class="card">
+  <h2>자산 배분</h2>
+  <div class="allocbar" id="allocBar"></div>
+  <div class="legend" id="allocLegend"></div>
+</div>
+
+<!-- 4. GitHub 연동 -->
+<div class="card">
+  <h2>GitHub 동기화</h2>
+  <div class="gh-btns">
+    <button class="btn-accent" id="btnPull">↓ 가져오기</button>
+    <button class="btn-accent" id="btnPush">↑ 올리기(커밋)</button>
+    <button class="btn-line" id="btnDownload">파일 다운로드</button>
+    <button class="btn-line" id="btnUploadOpen">파일 불러오기</button>
+    <button class="btn-ghost" id="btnCfg">⚙ 설정</button>
+  </div>
+  <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+  <div class="gh-cfg" id="ghCfg">
+    <input id="cfgOwner" placeholder="GitHub 사용자명 (예: 3260370-commits)">
+    <input id="cfgRepo"  placeholder="저장소명 (예: irp-monitor)">
+    <input id="cfgPath"  placeholder="파일 경로 (기본: holdings.json)">
+    <input id="cfgBranch" placeholder="브랜치 (기본: main)">
+    <input id="cfgToken" type="password" placeholder="Fine-grained PAT (이 저장소 전용, Contents Read+Write)">
+    <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="cfgAuto" checked> 자동 동기화 (앱을 열면 자동 가져오기, 수정하면 몇 초 뒤 자동 커밋)
+    </label>
+    <div class="hint">⚠ 토큰은 이 기기 브라우저에만 저장되며 GitHub 외부로 전송되지 않습니다. 토큰은 비공개 irp-monitor 저장소 하나에만, Contents 권한만 부여해 발급하세요. 이 앱 주소는 공개되어도 데이터·토큰은 노출되지 않습니다.</div>
+    <button class="btn-accent" id="btnCfgSave">설정 저장</button>
+  </div>
+  <div class="gh-status" id="ghStatus"></div>
+</div>
+
+<!-- 5. 보유 자산 -->
+<div class="card">
+  <h2>보유 자산</h2>
+  <div id="holdingList"></div>
+</div>
+
+<button class="add-btn" id="btnAdd">+</button>
+<div id="toast">저장됨</div>
+
+<script>
+'use strict';
+/* ================= IRP 전용 상수 (다른 계좌 앱과 절대 겹치지 않게) ================= */
+const LS_KEY   = 'irp_holdings_v1';
+const LS_TIME  = 'irp_saved_at_v1';
+const LS_GH    = 'irp_gh_cfg_v1';
+const LS_THR   = 'irp_thr_v1';
+const LS_SHA   = 'irp_last_sha_v1';   /* 마지막으로 동기화한 GitHub 파일 sha */
+const LS_DIRTY = 'irp_dirty_v1';      /* 로컬에 커밋 안 된 변경이 있는지 */
+const COLORS = ['#0e7a5f','#2563eb','#d97706','#7c3aed','#d64545','#0891b2','#65a30d','#be185d'];
+
+/* seedData: 배포 원칙 — 실제 보유 데이터를 코드에 절대 하드코딩하지 않는다 */
+function seedData(){ return []; }
+
+let holdings = loadHoldings();
+let saveTimer = null;
+
+/* ================= 저장/불러오기 (localStorage) ================= */
+function loadHoldings(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ const p = JSON.parse(raw); if(Array.isArray(p)) return p.map(normalize); }
+  }catch(e){ console.error(e); }
+  return seedData();
+}
+function saveHoldings(immediate){
+  const doSave = () => {
+    localStorage.setItem(LS_KEY, JSON.stringify(holdings));
+    localStorage.setItem(LS_TIME, new Date().toISOString());
+    setDirty(true); scheduleAutoPush();
+    showToast('저장됨'); renderUpdated();
+  };
+  clearTimeout(saveTimer);
+  if(immediate) doSave(); else saveTimer = setTimeout(doSave, 500);
+}
+
+/* 스키마 방어: 타 계좌/구버전 파일도 안전하게 수용 */
+function normalize(h, i){
+  return {
+    id: h.id || ('h' + Date.now() + '_' + (i||0) + '_' + Math.floor(Math.random()*1e4)),
+    name: h.name || '이름 없음',
+    ticker: (h.ticker || '').toString(),
+    type: h.type === 'cash' ? 'cash' : 'stock',       // stock=종목 / cash=예금·현금성
+    shares: Number(h.shares ?? 0) || 0,
+    avgPrice: Number(h.avgPrice ?? 0) || 0,            // cash일 땐 원금
+    currentPrice: Number(h.currentPrice ?? 0) || 0,    // cash일 땐 현재 평가액
+    targetWeight: Number(h.targetWeight ?? 0) || 0
+  };
+}
+
+/* ================= 계산 ================= */
+function valueOf(h){ return h.type === 'cash' ? h.currentPrice : h.shares * h.currentPrice; }
+function costOf(h){ return h.type === 'cash' ? h.avgPrice : h.shares * h.avgPrice; }
+function fmt(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+function pct(n){ return (Math.round(n*10)/10).toFixed(1) + '%'; }
+function getThr(){ return Number(localStorage.getItem(LS_THR)) || 5; }
+
+/* ================= 렌더링 ================= */
+function render(){
+  renderSummary(); renderWeights(); renderAlloc(); renderHoldings(); renderUpdated();
+}
+function renderUpdated(){
+  const t = localStorage.getItem(LS_TIME);
+  document.getElementById('updatedAt').textContent = t ? '마지막 저장: ' + new Date(t).toLocaleString('ko-KR') : '저장된 데이터 없음';
+}
+function renderSummary(){
+  const total = holdings.reduce((s,h)=>s+valueOf(h),0);
+  const cost  = holdings.reduce((s,h)=>s+costOf(h),0);
+  const pl = total - cost;
+  const rate = cost > 0 ? pl/cost*100 : 0;
+  document.getElementById('sumValue').textContent = fmt(total);
+  const elPL = document.getElementById('sumPL');
+  elPL.textContent = (pl>=0?'+':'') + fmt(pl);
+  elPL.className = 'val ' + (pl>0?'pos':pl<0?'neg':'');
+  const elR = document.getElementById('sumRate');
+  elR.textContent = (rate>=0?'+':'') + pct(rate);
+  elR.className = 'val ' + (rate>0?'pos':rate<0?'neg':'');
+  document.getElementById('sumCount').textContent = holdings.length + '개';
+}
+function renderWeights(){
+  const box = document.getElementById('weightRows');
+  const alertBox = document.getElementById('weightAlert');
+  const total = holdings.reduce((s,h)=>s+valueOf(h),0);
+  const thr = getThr();
+  if(!holdings.length || total<=0){ box.innerHTML = '<div class="empty">자산을 추가하면 비중 점검이 표시됩니다</div>'; alertBox.innerHTML=''; return; }
+  let html = '', alerts = [];
+  holdings.forEach(h=>{
+    const cur = valueOf(h)/total*100;
+    const gap = cur - h.targetWeight;
+    let cls='ok', mark='●';
+    if(gap > thr){ cls='over'; mark='▲'; }
+    else if(gap < -thr){ cls='under'; mark='▼'; }
+    html += `<div class="wrow"><span class="nm">${esc(h.name)}</span>
+      <span class="cur">${pct(cur)}</span>
+      <span class="tgt">목표 ${pct(h.targetWeight)}</span>
+      <span class="gap ${cls}">${mark} ${gap>=0?'+':''}${pct(gap)}p</span></div>`;
+    if(cls!=='ok'){
+      // 행동 가이드: 목표 금액과의 차이 → 매수/매도 필요 수량(주) 또는 금액
+      const diffAmt = valueOf(h) - total*h.targetWeight/100;
+      if(h.type==='cash'){
+        alerts.push(`${h.name}: ${diffAmt>0?'약 '+fmt(diffAmt)+' 축소':'약 '+fmt(-diffAmt)+' 증액'} 필요`);
+      }else if(h.currentPrice>0){
+        const qty = Math.floor(Math.abs(diffAmt)/h.currentPrice);
+        alerts.push(`${h.name}: ${qty}주 ${diffAmt>0?'매도':'매수'} (약 ${fmt(Math.abs(diffAmt))})`);
+      }
+    }
+  });
+  const tSum = holdings.reduce((s,h)=>s+h.targetWeight,0);
+  box.innerHTML = html;
+  let a = '';
+  if(Math.round(tSum*10)/10 !== 100) a += `<div class="alertbox">⚠ 목표비중 합계가 ${pct(tSum)}입니다 (100%가 되도록 조정하세요)</div>`;
+  if(alerts.length) a += `<div class="alertbox">🔔 <b>리밸런싱 검토 필요 (±${thr}%p 초과)</b><br>${alerts.map(esc).join('<br>')}</div>`;
+  else if(!a) a = `<div class="okbox">✅ 모든 자산이 목표비중 ±${thr}%p 이내입니다</div>`;
+  alertBox.innerHTML = a;
+}
+function renderAlloc(){
+  const bar = document.getElementById('allocBar');
+  const leg = document.getElementById('allocLegend');
+  const total = holdings.reduce((s,h)=>s+valueOf(h),0);
+  if(!holdings.length || total<=0){ bar.innerHTML=''; leg.innerHTML='<span class="empty">데이터 없음</span>'; return; }
+  let b='', l='';
+  holdings.forEach((h,i)=>{
+    const w = valueOf(h)/total*100;
+    const c = COLORS[i%COLORS.length];
+    b += `<div style="width:${w}%;background:${c}" title="${esc(h.name)} ${pct(w)}"></div>`;
+    l += `<span><span class="dot" style="background:${c}"></span>${esc(h.name)} ${pct(w)}</span>`;
+  });
+  bar.innerHTML=b; leg.innerHTML=l;
+}
+function renderHoldings(){
+  const list = document.getElementById('holdingList');
+  if(!holdings.length){
+    list.innerHTML = '<div class="empty">보유 자산이 없습니다.<br>오른쪽 아래 + 버튼으로 추가하거나<br>GitHub에서 "가져오기"를 눌러 주세요.</div>';
+    return;
+  }
+  list.innerHTML = holdings.map(h=>{
+    const v = valueOf(h), c = costOf(h), pl = v-c, rate = c>0?pl/c*100:0;
+    const plCls = pl>0?'pos':pl<0?'neg':'';
+    const isCash = h.type==='cash';
+    return `<div class="holding" data-id="${h.id}">
+      <div class="h-top">
+        <input class="h-name" data-id="${h.id}" data-field="name" value="${esc(h.name)}" placeholder="자산명">
+        <input class="h-ticker" data-id="${h.id}" data-field="ticker" value="${esc(h.ticker)}" placeholder="코드">
+        <button class="del" data-del="${h.id}" title="삭제">✕</button>
+      </div>
+      <div class="h-grid">
+        <div class="fld"><div class="lbl">구분</div>
+          <select data-id="${h.id}" data-field="type">
+            <option value="stock" ${isCash?'':'selected'}>종목(ETF/주식)</option>
+            <option value="cash" ${isCash?'selected':''}>예금·현금성</option>
+          </select></div>
+        ${isCash ? `
+        <div class="fld"><div class="lbl">원금(원)</div><input type="number" data-id="${h.id}" data-field="avgPrice" value="${h.avgPrice}"></div>
+        <div class="fld"><div class="lbl">현재 평가액(원)</div><input type="number" data-id="${h.id}" data-field="currentPrice" value="${h.currentPrice}"></div>
+        ` : `
+        <div class="fld"><div class="lbl">수량(주)</div><input type="number" data-id="${h.id}" data-field="shares" value="${h.shares}"></div>
+        <div class="fld"><div class="lbl">평균 매입가(원)</div><input type="number" data-id="${h.id}" data-field="avgPrice" value="${h.avgPrice}"></div>
+        <div class="fld"><div class="lbl">현재가(원)</div><input type="number" data-id="${h.id}" data-field="currentPrice" value="${h.currentPrice}"></div>
+        `}
+        <div class="fld"><div class="lbl">목표비중(%)</div><input type="number" data-id="${h.id}" data-field="targetWeight" value="${h.targetWeight}"></div>
+      </div>
+      <div class="h-foot">
+        <span>평가액 <b>${fmt(v)}</b></span>
+        <span class="pl ${plCls}">${pl>=0?'+':''}${fmt(pl)} (${rate>=0?'+':''}${pct(rate)})</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ================= 입력 이벤트 (위임 방식) ================= */
+document.addEventListener('input', e=>{
+  const id = e.target.dataset.id, field = e.target.dataset.field;
+  if(!id || !field) return;
+  const h = holdings.find(x=>x.id===id); if(!h) return;
+  if(['shares','avgPrice','currentPrice','targetWeight'].includes(field)) h[field] = Number(e.target.value)||0;
+  else h[field] = e.target.value;
+  saveHoldings(false);
+  if(field==='name'||field==='ticker'){ renderSummary(); renderWeights(); renderAlloc(); }
+  else if(field!=='type'){ renderSummary(); renderWeights(); renderAlloc(); updateFoot(id); }
+});
+document.addEventListener('change', e=>{
+  if(e.target.dataset.field==='type'){
+    const h = holdings.find(x=>x.id===e.target.dataset.id); if(!h) return;
+    h.type = e.target.value; saveHoldings(true); render();
+  }
+});
+function updateFoot(id){
+  const h = holdings.find(x=>x.id===id); if(!h) return;
+  const el = document.querySelector(`.holding[data-id="${id}"] .h-foot`); if(!el) return;
+  const v=valueOf(h), c=costOf(h), pl=v-c, rate=c>0?pl/c*100:0;
+  el.innerHTML = `<span>평가액 <b>${fmt(v)}</b></span>
+    <span class="pl ${pl>0?'pos':pl<0?'neg':''}">${pl>=0?'+':''}${fmt(pl)} (${rate>=0?'+':''}${pct(rate)})</span>`;
+}
+/* 삭제: 확인창 없이 즉시 (연금저축 앱 원칙 유지) */
+document.addEventListener('click', e=>{
+  const delId = e.target.dataset.del;
+  if(delId){ holdings = holdings.filter(h=>h.id!==delId); saveHoldings(true); render(); }
+});
+document.getElementById('btnAdd').addEventListener('click', ()=>{
+  holdings.push(normalize({ name:'', ticker:'', type:'stock', shares:0, avgPrice:0, currentPrice:0, targetWeight:0 }, holdings.length));
+  saveHoldings(true); render();
+  const cards = document.querySelectorAll('.holding');
+  if(cards.length){ const last = cards[cards.length-1]; last.scrollIntoView({behavior:'smooth'}); const inp = last.querySelector('.h-name'); if(inp) inp.focus(); }
+});
+
+/* ================= 임계값 설정 ================= */
+const thrInput = document.getElementById('thrInput');
+thrInput.value = getThr();
+thrInput.addEventListener('change', ()=>{
+  const v = Math.max(0.5, Math.min(30, Number(thrInput.value)||5));
+  thrInput.value = v; localStorage.setItem(LS_THR, v); renderWeights();
+});
+
+/* ================= 다운로드 / 업로드(파일) ================= */
+document.getElementById('btnDownload').addEventListener('click', ()=>{
+  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
+  const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'holdings.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('holdings.json 다운로드됨');
+});
+document.getElementById('btnUploadOpen').addEventListener('click', ()=>document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const parsed = JSON.parse(evt.target.result);
+      if(!Array.isArray(parsed)) throw new Error('형식이 올바르지 않습니다');
+      /* 덮어쓰기 확인 (되돌릴 수 없는 동작) */
+      if(holdings.length>0 && !confirm(`현재 ${holdings.length}개 자산을 파일의 ${parsed.length}개로 교체할까요?`)) return;
+      holdings = parsed.map(normalize);
+      saveHoldings(true); render();
+      showToast('불러오기 완료 — 요약 숫자를 확인하세요');
+    }catch(err){ alert('불러오기 실패: ' + err.message); }
+    finally{ e.target.value=''; }
+  };
+  reader.readAsText(file);
+});
+
+/* ================= GitHub API 동기화 ================= */
+function loadGhCfg(){
+  try{ return JSON.parse(localStorage.getItem(LS_GH)) || {}; }catch(e){ return {}; }
+}
+function ghCfgFilled(c){ return c.owner && c.repo && c.token; }
+const ghCfgBox = document.getElementById('ghCfg');
+document.getElementById('btnCfg').addEventListener('click', ()=>{
+  const c = loadGhCfg();
+  document.getElementById('cfgOwner').value = c.owner||'';
+  document.getElementById('cfgRepo').value = c.repo||'irp-monitor';
+  document.getElementById('cfgPath').value = c.path||'holdings.json';
+  document.getElementById('cfgBranch').value = c.branch||'main';
+  document.getElementById('cfgToken').value = c.token||'';
+  document.getElementById('cfgAuto').checked = c.autoSync !== false;
+  ghCfgBox.classList.toggle('open');
+});
+document.getElementById('btnCfgSave').addEventListener('click', ()=>{
+  const c = {
+    owner: document.getElementById('cfgOwner').value.trim(),
+    repo: document.getElementById('cfgRepo').value.trim() || 'irp-monitor',
+    path: document.getElementById('cfgPath').value.trim() || 'holdings.json',
+    branch: document.getElementById('cfgBranch').value.trim() || 'main',
+    token: document.getElementById('cfgToken').value.trim(),
+    autoSync: document.getElementById('cfgAuto').checked
+  };
+  localStorage.setItem(LS_GH, JSON.stringify(c));
+  ghCfgBox.classList.remove('open');
+  setGhStatus('설정이 이 기기에 저장되었습니다.');
+  if(c.autoSync) syncOnOpen(true);
+});
+function setGhStatus(msg, isErr){
+  const el = document.getElementById('ghStatus');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--red)' : 'var(--sub)';
+}
+function ghErrorMsg(status){
+  if(status===401) return '401: 토큰 오류/만료 — 토큰을 다시 발급받아 입력하세요';
+  if(status===403) return '403: 권한 부족 — 토큰에 이 저장소 Contents 권한이 있는지 확인하세요';
+  if(status===404) return '404: 경로/저장소 오류 — 사용자명·저장소명·파일경로를 재확인하세요';
+  if(status===409) return '409: 충돌 — 먼저 "가져오기"로 최신 데이터를 받은 뒤 다시 올리세요';
+  return status + ': 알 수 없는 오류';
+}
+function base64ToUtf8(b64){
+  const bytes = Uint8Array.from(atob(b64.replace(/\n/g,'')), c=>c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function utf8ToBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin);
+}
+async function ghGet(c){
+  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch}`;
+  const res = await fetch(url, { headers:{ 'Authorization':`Bearer ${c.token}`, 'Accept':'application/vnd.github+json' } });
+  if(!res.ok) throw new Error(ghErrorMsg(res.status));
+  return res.json();
+}
+/* 가져오기: GitHub → 앱 */
+document.getElementById('btnPull').addEventListener('click', async ()=>{
+  const c = loadGhCfg();
+  if(!ghCfgFilled(c)){ ghCfgBox.classList.add('open'); setGhStatus('먼저 ⚙ 설정에서 GitHub 정보를 입력하세요.', true); return; }
+  setGhStatus('GitHub에서 가져오는 중…');
+  try{
+    const data = await ghGet(c);
+    const parsed = JSON.parse(base64ToUtf8(data.content));
+    if(!Array.isArray(parsed)) throw new Error('holdings.json 형식이 올바르지 않습니다');
+    if(holdings.length>0 && getDirty() && !confirm(`현재 ${holdings.length}개 자산을 GitHub의 ${parsed.length}개로 교체할까요?\n(이 기기의 커밋 안 된 변경은 사라집니다)`)){ setGhStatus('가져오기 취소됨'); return; }
+    applyRemote(data);
+    setGhStatus('✅ 가져오기 완료 (' + new Date().toLocaleString('ko-KR') + ')');
+  }catch(err){ setGhStatus('❌ 가져오기 실패 — ' + err.message, true); }
+});
+/* 올리기: 앱 → GitHub 커밋 (현재 sha 조회 후 PUT) */
+document.getElementById('btnPush').addEventListener('click', async ()=>{
+  const c = loadGhCfg();
+  if(!ghCfgFilled(c)){ ghCfgBox.classList.add('open'); setGhStatus('먼저 ⚙ 설정에서 GitHub 정보를 입력하세요.', true); return; }
+  if(!confirm(`현재 앱의 ${holdings.length}개 자산을 GitHub(${c.repo}/${c.path})에 커밋할까요?\nGitHub 쪽 기존 내용은 덮어써집니다.`)) return;
+  setGhStatus('GitHub에 올리는 중…');
+  try{
+    let sha = null;
+    try{ const cur = await ghGet(c); sha = cur.sha; }
+    catch(err){ if(!err.message.startsWith('404')) throw err; } /* 파일이 아직 없으면 신규 생성 */
+    const r = await putContents(c, sha);
+    setSha(r.content.sha); setDirty(false);
+    setGhStatus('✅ 커밋 완료 (' + new Date().toLocaleString('ko-KR') + ')');
+    showToast('GitHub 커밋 완료');
+  }catch(err){ setGhStatus('❌ 올리기 실패 — ' + err.message, true); }
+});
+
+/* ================= 자동 동기화 ================= */
+function getDirty(){ return localStorage.getItem(LS_DIRTY)==='1'; }
+function setDirty(v){ localStorage.setItem(LS_DIRTY, v?'1':'0'); }
+function getSha(){ return localStorage.getItem(LS_SHA)||''; }
+function setSha(s){ localStorage.setItem(LS_SHA, s||''); }
+
+/* GitHub에서 받은 데이터를 앱에 반영하고 동기화 기준점(sha) 갱신 */
+function applyRemote(data){
+  const parsed = JSON.parse(base64ToUtf8(data.content));
+  if(!Array.isArray(parsed)) throw new Error('holdings.json 형식이 올바르지 않습니다');
+  holdings = parsed.map(normalize);
+  localStorage.setItem(LS_KEY, JSON.stringify(holdings));
+  localStorage.setItem(LS_TIME, new Date().toISOString());
+  setSha(data.sha); setDirty(false);
+  render();
+}
+
+/* 현재 holdings를 GitHub에 커밋 */
+async function putContents(c, sha){
+  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
+  const body = {
+    message: 'IRP 앱에서 업데이트 (' + new Date().toLocaleString('ko-KR') + ')',
+    content: utf8ToBase64(JSON.stringify(out,null,2)),
+    branch: c.branch
+  };
+  if(sha) body.sha = sha;
+  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}`;
+  const res = await fetch(url, {
+    method:'PUT',
+    headers:{ 'Authorization':`Bearer ${c.token}`, 'Accept':'application/vnd.github+json', 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error(ghErrorMsg(res.status));
+  return res.json();
+}
+
+/* 수정 후 4초 뒤 자동 커밋 (연속 수정은 마지막 것만) */
+let pushTimer = null;
+function scheduleAutoPush(){
+  const c = loadGhCfg();
+  if(c.autoSync===false || !ghCfgFilled(c)) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(autoPush, 4000);
+}
+async function autoPush(){
+  const c = loadGhCfg();
+  if(c.autoSync===false || !ghCfgFilled(c) || !getDirty()) return;
+  try{
+    let sha = null;
+    try{ const cur = await ghGet(c); sha = cur.sha; }
+    catch(err){ if(!err.message.startsWith('404')) throw err; }
+    /* 충돌 감지: 마지막 동기화 이후 다른 기기가 먼저 커밋한 경우 */
+    if(sha && getSha() && sha !== getSha()){
+      if(!confirm('다른 기기에서 먼저 커밋한 내용이 GitHub에 있습니다.\n확인: 이 기기 내용으로 덮어쓰기\n취소: 보류 (↓ 가져오기로 먼저 확인 권장)')){
+        setGhStatus('⚠ 자동 커밋 보류됨 — ↓ 가져오기로 GitHub 내용을 확인하세요', true); return;
+      }
+    }
+    const r = await putContents(c, sha);
+    setSha(r.content.sha); setDirty(false);
+    setGhStatus('✅ 자동 커밋 완료 (' + new Date().toLocaleTimeString('ko-KR') + ')');
+  }catch(err){ setGhStatus('❌ 자동 커밋 실패 — ' + err.message, true); }
+}
+
+/* 앱을 열거나 화면에 돌아왔을 때: GitHub 최신본 자동 반영 */
+let lastSyncCheck = 0;
+async function syncOnOpen(force){
+  const c = loadGhCfg();
+  if(c.autoSync===false || !ghCfgFilled(c)) return;
+  if(!force && Date.now()-lastSyncCheck < 30000) return; /* 30초 내 재확인 방지 */
+  lastSyncCheck = Date.now();
+  try{
+    setGhStatus('자동 동기화 확인 중…');
+    let data = null;
+    try{ data = await ghGet(c); }
+    catch(err){ if(err.message.startsWith('404')) data = null; else throw err; }
+    if(!data){ if(getDirty()) await autoPush(); else setGhStatus('GitHub에 holdings.json이 아직 없습니다'); return; }
+    if(getDirty()){
+      if(data.sha === getSha()){ await autoPush(); } /* 원격 변화 없음 → 내 변경 커밋 */
+      else if(confirm('GitHub에 새 데이터가 있고, 이 기기에도 커밋 안 된 변경이 있습니다.\n확인: GitHub 데이터로 교체\n취소: 이 기기 데이터 유지')){
+        applyRemote(data); setGhStatus('✅ GitHub 데이터로 교체됨');
+      }else{
+        setGhStatus('⚠ 이 기기 데이터 유지 중 — 다음 수정 시 GitHub를 덮어씁니다', true);
+      }
+    }else{
+      if(data.sha !== getSha()){
+        applyRemote(data);
+        setGhStatus('✅ 다른 기기의 변경사항을 가져왔습니다 (' + new Date().toLocaleTimeString('ko-KR') + ')');
+        showToast('자동 동기화됨');
+      }else{
+        setGhStatus('✅ 최신 상태 (' + new Date().toLocaleTimeString('ko-KR') + ')');
+      }
+    }
+  }catch(err){ setGhStatus('❌ 자동 동기화 실패 — ' + err.message, true); }
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncOnOpen(false); });
+
+/* ================= 토스트 ================= */
+let toastTimer=null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+render();
+syncOnOpen(true);
+/* PWA: 서비스 워커 등록 (설치형 앱 + 오프라인 지원) */
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
