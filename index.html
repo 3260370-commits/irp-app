@@ -96,6 +96,12 @@
     <div class="sum-item"><div class="lbl">수익률</div><div class="val" id="sumRate">0%</div></div>
     <div class="sum-item"><div class="lbl">자산 수</div><div class="val" id="sumCount">0</div></div>
   </div>
+  <div style="margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.78rem;border-top:1px dashed var(--line);padding-top:10px">
+    <span style="color:var(--sub)">납입원금</span>
+    <input type="number" id="principalInput" style="width:130px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:.8rem;text-align:right" placeholder="예: 20308000">
+    <span style="color:var(--sub)">원 · 납입 기준 손익</span>
+    <span id="sumPL2" style="font-weight:700">-</span>
+  </div>
 </div>
 
 <!-- 2. 목표비중 점검 -->
@@ -157,13 +163,15 @@ const LS_TIME  = 'irp_saved_at_v1';
 const LS_GH    = 'irp_gh_cfg_v1';
 const LS_THR   = 'irp_thr_v1';
 const LS_SHA   = 'irp_last_sha_v1';   /* 마지막으로 동기화한 GitHub 파일 sha */
-const LS_DIRTY = 'irp_dirty_v1';      /* 로컬에 커밋 안 된 변경이 있는지 */
+const LS_DIRTY = 'irp_dirty_v1';
+const LS_PRIN  = 'irp_principal_v1';  /* 납입원금 (증권사 기준 수익률 계산용) */      /* 로컬에 커밋 안 된 변경이 있는지 */
 const COLORS = ['#0e7a5f','#2563eb','#d97706','#7c3aed','#d64545','#0891b2','#65a30d','#be185d'];
 
 /* seedData: 배포 원칙 — 실제 보유 데이터를 코드에 절대 하드코딩하지 않는다 */
 function seedData(){ return []; }
 
 let holdings = loadHoldings();
+let principal = Number(localStorage.getItem(LS_PRIN)) || 0;
 let saveTimer = null;
 
 /* ================= 저장/불러오기 (localStorage) ================= */
@@ -227,6 +235,12 @@ function renderSummary(){
   elR.textContent = (rate>=0?'+':'') + pct(rate);
   elR.className = 'val ' + (rate>0?'pos':rate<0?'neg':'');
   document.getElementById('sumCount').textContent = holdings.length + '개';
+  const el2 = document.getElementById('sumPL2');
+  if(principal > 0 && total > 0){
+    const pl2 = total - principal, r2 = pl2/principal*100;
+    el2.textContent = (pl2>=0?'+':'') + fmt(pl2) + ' (' + (r2>=0?'+':'') + pct(r2) + ')';
+    el2.className = pl2>0?'pos':pl2<0?'neg':'';
+  }else{ el2.textContent = '-'; el2.className = ''; }
 }
 function renderWeights(){
   const box = document.getElementById('weightRows');
@@ -355,6 +369,16 @@ document.getElementById('btnAdd').addEventListener('click', ()=>{
   if(cards.length){ const last = cards[cards.length-1]; last.scrollIntoView({behavior:'smooth'}); const inp = last.querySelector('.h-name'); if(inp) inp.focus(); }
 });
 
+/* ================= 납입원금 입력 ================= */
+const prinInput = document.getElementById('principalInput');
+prinInput.value = principal || '';
+prinInput.addEventListener('input', ()=>{
+  principal = Number(prinInput.value)||0;
+  localStorage.setItem(LS_PRIN, principal);
+  renderSummary();
+  saveHoldings(false); /* holdings.json에 함께 저장되도록 자동 커밋 트리거 */
+});
+
 /* ================= 임계값 설정 ================= */
 const thrInput = document.getElementById('thrInput');
 thrInput.value = getThr();
@@ -366,7 +390,7 @@ thrInput.addEventListener('change', ()=>{
 /* ================= 다운로드 / 업로드(파일) ================= */
 document.getElementById('btnDownload').addEventListener('click', ()=>{
   const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
-  const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify({ principal: principal, holdings: out },null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'holdings.json';
@@ -380,11 +404,11 @@ document.getElementById('fileInput').addEventListener('change', e=>{
   const reader = new FileReader();
   reader.onload = evt=>{
     try{
-      const parsed = JSON.parse(evt.target.result);
-      if(!Array.isArray(parsed)) throw new Error('형식이 올바르지 않습니다');
+      const ed = extractData(JSON.parse(evt.target.result));
       /* 덮어쓰기 확인 (되돌릴 수 없는 동작) */
-      if(holdings.length>0 && !confirm(`현재 ${holdings.length}개 자산을 파일의 ${parsed.length}개로 교체할까요?`)) return;
-      holdings = parsed.map(normalize);
+      if(holdings.length>0 && !confirm(`현재 ${holdings.length}개 자산을 파일의 ${ed.arr.length}개로 교체할까요?`)) return;
+      if(ed.principal !== null) setPrincipal(ed.principal);
+      holdings = ed.arr.map(normalize);
       saveHoldings(true); render();
       showToast('불러오기 완료 — 요약 숫자를 확인하세요');
     }catch(err){ alert('불러오기 실패: ' + err.message); }
@@ -457,9 +481,8 @@ document.getElementById('btnPull').addEventListener('click', async ()=>{
   setGhStatus('GitHub에서 가져오는 중…');
   try{
     const data = await ghGet(c);
-    const parsed = JSON.parse(base64ToUtf8(data.content));
-    if(!Array.isArray(parsed)) throw new Error('holdings.json 형식이 올바르지 않습니다');
-    if(holdings.length>0 && getDirty() && !confirm(`현재 ${holdings.length}개 자산을 GitHub의 ${parsed.length}개로 교체할까요?\n(이 기기의 커밋 안 된 변경은 사라집니다)`)){ setGhStatus('가져오기 취소됨'); return; }
+    const ed = extractData(JSON.parse(base64ToUtf8(data.content)));
+    if(holdings.length>0 && getDirty() && !confirm(`현재 ${holdings.length}개 자산을 GitHub의 ${ed.arr.length}개로 교체할까요?\n(이 기기의 커밋 안 된 변경은 사라집니다)`)){ setGhStatus('가져오기 취소됨'); return; }
     applyRemote(data);
     setGhStatus('✅ 가져오기 완료 (' + new Date().toLocaleString('ko-KR') + ')');
   }catch(err){ setGhStatus('❌ 가져오기 실패 — ' + err.message, true); }
@@ -487,11 +510,22 @@ function setDirty(v){ localStorage.setItem(LS_DIRTY, v?'1':'0'); }
 function getSha(){ return localStorage.getItem(LS_SHA)||''; }
 function setSha(s){ localStorage.setItem(LS_SHA, s||''); }
 
+/* 구버전(배열)·신버전(객체 {principal, holdings}) 파일을 모두 수용 */
+function extractData(parsed){
+  if(Array.isArray(parsed)) return { principal: null, arr: parsed };
+  if(parsed && Array.isArray(parsed.holdings)) return { principal: Number(parsed.principal)||0, arr: parsed.holdings };
+  throw new Error('holdings.json 형식이 올바르지 않습니다');
+}
+function setPrincipal(p){
+  principal = p; localStorage.setItem(LS_PRIN, p);
+  const inp = document.getElementById('principalInput'); if(inp) inp.value = p || '';
+}
+
 /* GitHub에서 받은 데이터를 앱에 반영하고 동기화 기준점(sha) 갱신 */
 function applyRemote(data){
-  const parsed = JSON.parse(base64ToUtf8(data.content));
-  if(!Array.isArray(parsed)) throw new Error('holdings.json 형식이 올바르지 않습니다');
-  holdings = parsed.map(normalize);
+  const ed = extractData(JSON.parse(base64ToUtf8(data.content)));
+  if(ed.principal !== null) setPrincipal(ed.principal);
+  holdings = ed.arr.map(normalize);
   localStorage.setItem(LS_KEY, JSON.stringify(holdings));
   localStorage.setItem(LS_TIME, new Date().toISOString());
   setSha(data.sha); setDirty(false);
@@ -503,7 +537,7 @@ async function putContents(c, sha){
   const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
   const body = {
     message: 'IRP 앱에서 업데이트 (' + new Date().toLocaleString('ko-KR') + ')',
-    content: utf8ToBase64(JSON.stringify(out,null,2)),
+    content: utf8ToBase64(JSON.stringify({ principal: principal, holdings: out },null,2)),
     branch: c.branch
   };
   if(sha) body.sha = sha;
