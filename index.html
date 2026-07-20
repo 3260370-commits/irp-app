@@ -118,6 +118,7 @@
   <h2>자산 배분</h2>
   <div class="allocbar" id="allocBar"></div>
   <div class="legend" id="allocLegend"></div>
+  <div id="riskBox" style="margin-top:14px"></div>
 </div>
 
 <!-- 4. GitHub 연동 -->
@@ -203,7 +204,8 @@ function normalize(h, i){
     shares: Number(h.shares ?? 0) || 0,
     avgPrice: Number(h.avgPrice ?? 0) || 0,            // cash일 땐 원금
     currentPrice: Number(h.currentPrice ?? 0) || 0,    // cash일 땐 현재 평가액
-    targetWeight: Number(h.targetWeight ?? 0) || 0
+    targetWeight: Number(h.targetWeight ?? 0) || 0,
+    risk: h.risk === true || h.risk === 'Y'   /* 위험자산여부 (증권사 Y/N) */
   };
 }
 
@@ -282,7 +284,7 @@ function renderAlloc(){
   const bar = document.getElementById('allocBar');
   const leg = document.getElementById('allocLegend');
   const total = holdings.reduce((s,h)=>s+valueOf(h),0);
-  if(!holdings.length || total<=0){ bar.innerHTML=''; leg.innerHTML='<span class="empty">데이터 없음</span>'; return; }
+  if(!holdings.length || total<=0){ bar.innerHTML=''; leg.innerHTML='<span class="empty">데이터 없음</span>'; document.getElementById('riskBox').innerHTML=''; return; }
   let b='', l='';
   holdings.forEach((h,i)=>{
     const w = valueOf(h)/total*100;
@@ -291,6 +293,20 @@ function renderAlloc(){
     l += `<span><span class="dot" style="background:${c}"></span>${esc(h.name)} ${pct(w)}</span>`;
   });
   bar.innerHTML=b; leg.innerHTML=l;
+  /* 위험자산 비중 (IRP 위험자산 한도 70%) */
+  const riskV = holdings.reduce((s,h)=>s+(h.risk?valueOf(h):0),0);
+  const rp = riskV/total*100;
+  const over = rp > 70;
+  document.getElementById('riskBox').innerHTML = `
+    <div style="font-size:.72rem;color:var(--sub);margin-bottom:5px">위험자산 비중 (IRP 한도 70%)</div>
+    <div class="allocbar" style="height:14px">
+      <div style="width:${rp}%;background:${over?'var(--red)':'#d97706'}"></div>
+      <div style="width:${100-rp}%;background:var(--accent)"></div>
+    </div>
+    <div style="font-size:.75rem;margin-top:5px">
+      위험자산 <b style="color:${over?'var(--red)':'#b45309'}">${pct(rp)}</b> · 안전자산 <b style="color:var(--accent-dark)">${pct(100-rp)}</b>
+    </div>
+    ${over?'<div class="alertbox">⚠ 위험자산 비중이 IRP 한도 70%를 초과했습니다. 안전자산 매수 또는 위험자산 매도가 필요합니다.</div>':''}`;
 }
 function renderHoldings(){
   const list = document.getElementById('holdingList');
@@ -323,6 +339,11 @@ function renderHoldings(){
         <div class="fld"><div class="lbl">현재가(원)</div><input type="number" data-id="${h.id}" data-field="currentPrice" value="${h.currentPrice}"></div>
         `}
         <div class="fld"><div class="lbl">목표비중(%)</div><input type="number" data-id="${h.id}" data-field="targetWeight" value="${h.targetWeight}"></div>
+        <div class="fld"><div class="lbl">위험자산</div>
+          <select data-id="${h.id}" data-field="risk">
+            <option value="N" ${h.risk?'':'selected'}>N (안전)</option>
+            <option value="Y" ${h.risk?'selected':''}>Y (위험)</option>
+          </select></div>
       </div>
       <div class="h-foot">
         <span>평가액 <b>${fmt(v)}</b></span>
@@ -348,6 +369,9 @@ document.addEventListener('change', e=>{
   if(e.target.dataset.field==='type'){
     const h = holdings.find(x=>x.id===e.target.dataset.id); if(!h) return;
     h.type = e.target.value; saveHoldings(true); render();
+  }else if(e.target.dataset.field==='risk'){
+    const h = holdings.find(x=>x.id===e.target.dataset.id); if(!h) return;
+    h.risk = e.target.value === 'Y'; saveHoldings(true); renderAlloc();
   }
 });
 function updateFoot(id){
@@ -389,7 +413,7 @@ thrInput.addEventListener('change', ()=>{
 
 /* ================= 다운로드 / 업로드(파일) ================= */
 document.getElementById('btnDownload').addEventListener('click', ()=>{
-  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
+  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, risk:h.risk, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
   const blob = new Blob([JSON.stringify({ principal: principal, holdings: out },null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -534,7 +558,7 @@ function applyRemote(data){
 
 /* 현재 holdings를 GitHub에 커밋 */
 async function putContents(c, sha){
-  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
+  const out = holdings.map(h=>({ id:h.id, name:h.name, ticker:h.ticker, type:h.type, risk:h.risk, shares:h.shares, avgPrice:h.avgPrice, currentPrice:h.currentPrice, targetWeight:h.targetWeight }));
   const body = {
     message: 'IRP 앱에서 업데이트 (' + new Date().toLocaleString('ko-KR') + ')',
     content: utf8ToBase64(JSON.stringify({ principal: principal, holdings: out },null,2)),
